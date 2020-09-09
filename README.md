@@ -1,24 +1,4 @@
-# client
-
-## Project setup
-```
-yarn install
-```
-
-### Compiles and hot-reloads for development
-```
-yarn serve
-```
-
-### Compiles and minifies for production
-```
-yarn build
-```
-
-### Lints and fixes files
-```
-yarn lint
-```
-
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+# chat-client
+一个使用一个基于vue、vue-socket.io的匿名聊天系统
+# 演示地址
+http://39.105.103.136:82/
