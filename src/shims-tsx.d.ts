@@ -11,3 +11,17 @@ declare global {
     }
   }
 }
+
+declare module 'vue/types/vue' {
+  interface Vue {
+    $style: {
+      [key: string]: string;
+    };
+  }
+
+  interface VueConstructor {
+    $style: {
+      [key: string]: string;
+    };
+  }
+}
