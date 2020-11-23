@@ -10,6 +10,8 @@
 </template>
 
 <script lang="ts">
+// 目前问题：可访问的stun服务无法用于项目，待解决
+
 // 证书类型：nginx
 // 安装https：https://blog.csdn.net/qq_36940740/article/details/105325395
 // 安装https：https://blog.csdn.net/qq_33973359/article/details/105537568
@@ -17,7 +19,7 @@
 // 访问：https://39.105.103.136:9522/peer
 // stun服务：https://github.com/enobufs/stun
 import { Component, Ref, Vue } from 'vue-property-decorator'
-import Peer, { DataConnection, MediaConnection, PeerConnectOption, PeerJSOption } from 'peerjs'
+import Peer, { DataConnection, MediaConnection, PeerJSOption } from 'peerjs'
 import { News, NewType } from '@/types/chart'
 
 enum ConnectionStatus{
@@ -34,20 +36,14 @@ const peerOption:PeerJSOption = {
   host: '39.105.103.136', // 中转服务地址
   secure: true, // 使用https
   port: 9522, // 端口
-  debug: 0, // 0:输出日志，1:输出错误，2:输出错误和日志，3：输出所有
+  debug: 3, // 0:输出日志，1:输出错误，2:输出错误和日志，3：输出所有
   path: 'peer',
   config: {
     // iceTransportPolicy: 'relay',
     // sdpSemantics: 'unified-plan',
     iceServers: [
-      { urls: 'turn:numb.viagenie.ca', credential: '123456', username: '2690363124@qq.com' }
-      // { urls: 'stun:39.105.103.136:3478' },
-      // { urls: 'stun:39.105.103.136:3479' }
-      // {
-      //   urls: 'turn:39.105.103.136:3480',
-      //   credential: '12345678',
-      //   username: 'admin'
-      // }
+      // { urls: 'turn:numb.viagenie.ca', credential: '123456', username: '2690363124@qq.com' }
+      { urls: 'stun:39.105.103.136:3478' }
     ]
   }
 }
@@ -175,10 +171,21 @@ export default class Peer121 extends Vue {
     })
   }
 
-  mounted ():void{
+  verificationService ():void {
+    const httpRequest = new XMLHttpRequest()
+    httpRequest.open('get', 'https://39.105.103.136:9522/peer', true)
+    httpRequest.send()
+    httpRequest.onreadystatechange = (e:Event) => {
+      if (httpRequest.readyState === 4 && httpRequest.status === 200) {
+        console.log(httpRequest.response)
+      }
+    }
+  }
+
+  mounted ():void {
     const { peer } = this
     const { id } = this.$route.query
-    console.log(peer)
+    this.verificationService()
     peer.on('open', async () => {
       if (id === 'ReceiveUser') {
         peer.on('connection', (conn:DataConnection) => {

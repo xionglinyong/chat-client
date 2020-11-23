@@ -20,3 +20,19 @@ export enum NewType {
   Answer,
   disconnect
 }
+
+type MimeType='video/webm'|'audio/webm'|'video/webm\\;codecs=vp8'
+  |'video/webm\\;codecs=daala'| 'video/webm\\;codecs=h264'
+  |'audio/webm\\;codecs=opus'|'video/mpeg'
+
+export interface MediaRecorder {
+  mimeType:string;
+  // eslint-disable-next-line @typescript-eslint/no-misused-new
+  new(stream:MediaStream, options:{
+    mimeType:MimeType;
+    audioBitsPerSecond:number;
+    videoBitsPerSecond:number;
+    bitsPerSecond:number;
+  }):MediaRecorder;
+
+}

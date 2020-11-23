@@ -17,6 +17,26 @@
 </template>
 
 <script lang="ts">
+/*
+https://developer.mozilla.org/zh-CN/docs/Web/API/WebRTC_API/Signaling_and_video_calling
+基本流程：
+  发送端和接收端创建本地代理（RTCPeerConnection），并监听对等端媒体流
+  发送端获取媒体流
+  发送端代理添加视频流
+  发送端监听本地候选信息，如果已经准备好了，就发送到对等端
+  发送端准备发送通话邀请
+  发送端穿件会话邀请
+  发送端创建会话邀请信息描述
+  发送端设置本地会话信息描述为会话邀请信息描述
+  通过信令服务器将会话邀请信息描述发送给接收端
+  接收端接收会话信息，设置为远端会话描述
+  接收端创建应答会话信息描述，并设置为本地会话信息描述
+  通过信令服务器将应答会话信息描述发送给发送端
+  发送端设置应答会话信息为远端会话描述
+  两端交换候选信息，直至有一个候选信息一致
+  建立连接
+  持续交换候选信息（为了选择更好的候选信息）
+*/
 import { Component, Ref, Vue } from 'vue-property-decorator'
 @Component
 export default class Online1to1 extends Vue {
@@ -99,10 +119,11 @@ export default class Online1to1 extends Vue {
       const { peer } = this
       // 发送会话邀请时，创建本地数据通道
       const dc = this.dataChannel = this.peer.createDataChannel(this.$socket.id)
+      console.log(dc)
       // 监听
       dc.onmessage = (e:MessageEvent) => {
         this.messages.push({
-          sender: '对面的',
+          sender: '对方',
           message: e.data
         })
       }
@@ -147,7 +168,7 @@ export default class Online1to1 extends Vue {
       const dc = this.dataChannel = e.channel
       dc.onmessage = (e:MessageEvent) => {
         this.messages.push({
-          sender: '对面的',
+          sender: '对方',
           message: e.data
         })
       }

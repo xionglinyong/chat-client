@@ -19,7 +19,7 @@ https://developer.mozilla.org/zh-CN/docs/Web/API/WebRTC_API/Signaling_and_video_
 基本流程：
   发送端和接收端创建本地代理（RTCPeerConnection），并监听对等端媒体流
   发送端获取媒体流
-  发送端连接添加视频流
+  发送端代理添加视频流
   发送端监听本地候选信息，如果已经准备好了，就发送到对等端
   发送端准备发送通话邀请
   发送端穿件会话邀请
@@ -76,8 +76,17 @@ export default class WebRTC extends Vue {
   async sendCall ():Promise<void> {
     try {
       const { outVideo, peerOut, peerIn } = this
+      const { mediaDevices } = navigator
+      // 如果不支持音视频输入则弹框警告
+      const devices:Array<MediaDeviceInfo> = await mediaDevices.enumerateDevices()
+      if (!devices.find((item:MediaDeviceInfo) => item.kind === 'audioinput')) {
+        alert('设备不支持音频')
+      }
+      if (!devices.find((item:MediaDeviceInfo) => item.kind === 'videoinput')) {
+        alert('设备不支持视频')
+      }
       // 获取媒体流，并播放到Video
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+      this.mediaStream = await mediaDevices.getUserMedia({
         video: true,
         audio: true
       })

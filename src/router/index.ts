@@ -23,6 +23,21 @@ const routes: Array<RouteConfig> = [
     path: '/peer121',
     name: 'Peer121',
     component: () => import(/* webpackChunkName: "peer121" */ '../views/peer121.vue')
+  },
+  {
+    path: '/sound-record',
+    name: 'SoundRecord',
+    component: () => import(/* webpackChunkName: "sound-record" */ '../views/sound-record.vue')
+  },
+  {
+    path: '/sound-record-2',
+    name: 'SoundRecord2',
+    component: () => import(/* webpackChunkName: "sound-record-2" */ '../views/sound-record-2.vue')
+  },
+  {
+    path: '/speech-synthesis',
+    name: 'SpeechSynthesis',
+    component: () => import(/* webpackChunkName: "speech-synthesis" */ '../views/speech-synthesis.vue')
   }
 ]
 
