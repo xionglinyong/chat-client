@@ -35,9 +35,9 @@ const routes: Array<RouteConfig> = [
     component: () => import(/* webpackChunkName: "sound-record-2" */ '@/views/sound-record-2.vue')
   },
   {
-    path: '/sound-record-2-test',
-    name: 'SoundRecord2Test',
-    component: () => import(/* webpackChunkName: "sound-record-2-test" */ '@/views/sound-record-2-test.vue')
+    path: '/sound-record-compression',
+    name: 'SoundRecordCompression',
+    component: () => import(/* webpackChunkName: "sound-record-compression" */ '@/views/sound-record-compression.vue')
   },
   {
     path: '/speech-synthesis',
