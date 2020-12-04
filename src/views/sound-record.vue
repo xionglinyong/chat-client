@@ -3,24 +3,25 @@
     v-file-input(@change="onChange")
     v-btn(@click="audioData.length===0?record():stopRecord()") {{audioData.length===0?'录制':'停止录制'}}
     v-btn(@click="playAudio") 播放录音
-    v-btn(@click="downToLocal") 保存为本地音乐文件
+    v-btn(@click="downloadToLocal") 保存为本地音乐文件
 </template>
 
 <script lang="ts">
 import { Component, Vue } from 'vue-property-decorator'
+import { downloadToLocal, playAudio } from '@/utils/record'
 
 @Component
 export default class SoundRecord extends Vue {
-  audioData:Array<File>=[]// 音频数据
-  mediaStream!:MediaStream// 媒体流
-  recorder!:any// 录制器
-  currentFile:File|null=null// 当前录制音频文件流
+  audioData: Array<Blob> = []// 音频数据
+  mediaStream!: MediaStream// 媒体流
+  recorder!: any// 录制器
+  currentFile: File | null = null// 当前录制音频文件流
 
   /**
    * 录制
    * @returns {Promise<void>}
    */
-  async record ():Promise<void> {
+  async record (): Promise<void> {
     try {
       // 获取麦克风媒体流
       const stream = this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -39,27 +40,21 @@ export default class SoundRecord extends Vue {
         mimeType: 'audio/webm'
       })
 
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
       // 当得到数据时的处理回调
-      recorder.ondataavailable = async (e:BlobEvent) => {
+      recorder.ondataavailable = async (e: { data: Blob }) => {
         console.log(e.data)
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
         this.audioData.push(e.data)
       }
       // 当录制停止时
       recorder.onstop = () => {
         const time = (new Date()).toISOString().replace('T', ' ')
-        const recorderFile = new Blob(this.audioData, { type: this.recorder.mimeType })
+        // 根据二进制文件对象生成文件对象
+        this.currentFile = new File(this.audioData, `${time}.mp3`, { type: 'audio/mpeg' })
         this.audioData = []
-        this.currentFile = new File([recorderFile], `${time}.mp3`, { type: 'audio/mp3' })
-        console.log('stop')
       }
-      // 每隔10毫秒惊喜一次录制数据切割
+      // 每隔10毫秒进行一次录制数据切割
       recorder.start(10)
     } catch (e) {
-      console.log(e)
       if (e.name === 'TypeError') {
         alert('当前环境不支持视频通话')
       } else if (e.name === 'NotAllowedError') {
@@ -76,11 +71,10 @@ export default class SoundRecord extends Vue {
     }
   }
 
-  stopRecord ():void {
+  stopRecord (): void {
     const { mediaStream } = this
     // 获取所有的媒体通道并停止他们
-    const tracks = mediaStream.getTracks()
-    tracks.forEach(track => {
+    mediaStream.getTracks().forEach(track => {
       track.stop()
     })
     // 停止录音
@@ -90,64 +84,31 @@ export default class SoundRecord extends Vue {
   /**
    * 下载至本地
    */
-  downToLocal ():void {
-    const { currentFile } = this
-    if (!currentFile) {
-      alert('请先录制完成，再来播放')
-      return
+  async downloadToLocal (): Promise<void> {
+    try {
+      const { currentFile } = this
+      await downloadToLocal(currentFile as File, '请先录制完成，再下载')
+    } catch (e) {
+      alert(e)
     }
-    const time = (new Date()).toISOString().replace('T', ' ')
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(currentFile)
-    a.setAttribute('download', `${time}.mp3`)
-    a.click()
   }
 
   /**
    * 播放当前录制的音频
    */
-  playAudio ():void {
-    const { currentFile } = this
-    if (!currentFile) {
-      alert('请先录制完成，再来播放')
-      return
+  async playAudio (): Promise<void> {
+    try {
+      const { currentFile } = this
+      await playAudio(currentFile as File, '请先录制完成，再播放')
+    } catch (e) {
+      alert(e)
     }
-    // 创建一个文件读取器
-    const fileReader = new FileReader()
-
-    // 通过AudioContext播放音频
-    fileReader.onload = async () => {
-      // 创建一个AudioContext
-      const audioContext = new AudioContext()
-      // 创建一个AudioNode通过AudioContext
-      const audioNode = audioContext.createBufferSource()
-      // AudioContext对二进制文件进行解码
-      audioNode.buffer = await audioContext.decodeAudioData(fileReader.result as ArrayBuffer)
-      audioNode.connect(audioContext.destination)
-      audioNode.start(0)
-    }
-    // 读取选中的文件
-    fileReader.readAsArrayBuffer(this.currentFile as File)
   }
 
-  onChange (e:InputEvent):void {
+  onChange (e: InputEvent): void {
     console.log(e)
     // 创建一个文件读取器
     const fileReader = new FileReader()
-
-    // 第一种播放音频的方法：通过audio元素
-    // fileReader.onload = () => {
-    //   // 利用读取结果创建8位无符号整型数组，再利用这个数组创建二进制流文件
-    //   const blob = new Blob([new Int8Array(fileReader.result)], {
-    //     type: 'audio/mp3'
-    //   })
-    //   // 利用二进制流文件生成一个URL
-    //   const url = URL.createObjectURL(blob)
-    //   console.log(url)
-    //   // 播放
-    //   this.audio.src = url
-    //   this.audio.play()
-    // }
 
     // 第二种播放音频的方法，通过AudioContext
     fileReader.onload = async () => {
@@ -166,7 +127,7 @@ export default class SoundRecord extends Vue {
     fileReader.readAsArrayBuffer(e)
   }
 
-  mounted ():void {
+  mounted (): void {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     if (!MediaRecorder) {

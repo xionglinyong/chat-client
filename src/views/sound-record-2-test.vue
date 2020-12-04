@@ -1,32 +1,36 @@
 <template lang="pug">
   div(:class="$style.inner")
     RealVolume(:volume="volume")
-    div {{recordingTime}}s
-    v-btn(@click="leftAudioData.length===0?record():stopRecord()")
-      | {{leftAudioData.length===0?'录制':'停止录制'}}
+    div {{recordingTime/10}}s
+    v-btn(@click="audioData.length===0?record():stopRecord()") {{audioData.length===0?'录制':'停止录制'}}
     v-btn(@click="playAudio") 播放录音
     v-btn(@click="downloadToLocal") 保存为本地音乐文件
 </template>
 
 <script lang="ts">
+/**
+ * WebAudio+WebRTC音频录制，对音频进行了压缩
+ * https://www.cnblogs.com/blqw/p/3782420.html
+ */
 import { Component, Vue } from 'vue-property-decorator'
 import RealVolume from '@/components/real-volume.vue'
 import { downloadToLocal, playAudio } from '@/utils/record'
 
 let timer = 0
+// 压缩后的采样率
+let compressionSamplingRate = 22050
+const sampleRate = 44100
 
 @Component({
   components: { RealVolume }
 })
 export default class SoundRecord2 extends Vue {
-  leftAudioData: Array<Float32Array> = []// 左声道音频数据
-  rightAudioData: Array<Float32Array> = []// 右声道音频数据
+  audioData: Array<Float32Array> = []// 音频数据
   mediaStream!: MediaStream// 媒体流
   currentFile: File | null = null// 当前录制音频文件流
   jsNode!: ScriptProcessorNode
   mediaNode!: MediaStreamAudioSourceNode
   recordingTime = 0
-  // 实时音量
   volume = 0
 
   /**
@@ -38,7 +42,7 @@ export default class SoundRecord2 extends Vue {
       // 获取麦克风媒体流
       const stream = this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          sampleRate: 48000,
+          sampleRate,
           channelCount: 2
         },
         video: false
@@ -48,28 +52,25 @@ export default class SoundRecord2 extends Vue {
       const ac = new AudioContext()
       // 通过媒体流创建一个audioNode
       const mediaNode = this.mediaNode = ac.createMediaStreamSource(stream)
-
-      // 绑定createScriptProcessor的this为AudioContext，然后创建一个处理了音频的节点
+      // 创建ScriptProcessorNode操作用以处理音频
       const creator = ac.createScriptProcessor.bind(ac)
-      const jsNode = this.jsNode = creator(16384, 2, 2)// 设置的更小的话会造成有杂音
-
+      const jsNode = this.jsNode = creator(16384, 1, 1)// 设置录制单声道，能有效减少录音文件的大小
+      this.recordingTime = 0
       // 连接到AudioContext
       jsNode.connect(ac.destination)
-      // audioNode连接到jsNode
-      mediaNode.connect(jsNode)
       // 添加音频流入事件
       jsNode.onaudioprocess = (e: AudioProcessingEvent) => {
         const audioBuffer = e.inputBuffer
         const leftData = audioBuffer.getChannelData(0)
-        const rightData = audioBuffer.getChannelData(1)
-        this.volume = rightData[rightData.length - 1] + 1
+        this.volume = leftData[leftData.length - 1] + 1
         // 这里有个坑，如果不进行深拷贝的话，录制出来的音频会有问题
-        this.leftAudioData.push(leftData.slice(0))
-        this.rightAudioData.push(rightData.slice(0))
+        this.audioData.push(leftData.slice(0))
       }
+      // audioNode连接到jsNode
+      mediaNode.connect(jsNode)
       timer = setInterval(() => {
         this.recordingTime++
-      }, 1000)
+      }, 100)
     } catch (e) {
       console.log(e)
       if (e.name === 'TypeError') {
@@ -92,7 +93,6 @@ export default class SoundRecord2 extends Vue {
     const { mediaStream } = this
     // 获取所有的媒体通道并停止他们
     const tracks = mediaStream.getTracks()
-
     clearInterval(timer)
 
     tracks.forEach(track => {
@@ -103,12 +103,9 @@ export default class SoundRecord2 extends Vue {
     this.mediaNode.disconnect()
 
     // 合并数据
-    const left = mergeArray(this.leftAudioData)
-    const right = mergeArray(this.rightAudioData)
-    const audioData = mergedProvincialHighway(left, right)
-    this.currentFile = createAudioFile(audioData)
-    this.leftAudioData = []
-    this.rightAudioData = []
+    const audioData = mergeArray(this.audioData)
+    this.currentFile = createAudioFile(compressedData(audioData, 11025))
+    this.audioData = []
   }
 
   /**
@@ -137,28 +134,15 @@ export default class SoundRecord2 extends Vue {
 }
 
 /**
- *交叉合并两个声道
- * @param {Float32Array} left 左声道
- * @param {Float32Array} right 右声道
- */
-function mergedProvincialHighway (left: Float32Array, right: Float32Array): Float32Array {
-  const length = left.length + right.length
-  const data = new Float32Array(length)
-  for (let i = 0; i < left.length; i++) {
-    const j = i * 2
-    data[j] = left[i]
-    data[j + 1] = right[i]
-  }
-  return data
-}
-
-/**
  * 根据合成的录音数据创建文件
  * @param {Float32Array} audioData 合成的数据
  * @returns {File} 创建的文件
  */
 function createAudioFile (audioData: Float32Array) {
-  const bufferLength = audioData.length * 2 + 44
+  const channelCount = 1// 通道数，减小通道数可以压缩文件
+  const sampleBits = 8// 采样位数，减小可以压缩文件，8/16
+  const samplingRate = compressionSamplingRate
+  const bufferLength = audioData.length * (sampleBits / 8) + 44
   const buffer = new ArrayBuffer(bufferLength)
   const view = new DataView(buffer)
   let index = 44
@@ -175,16 +159,16 @@ function createAudioFile (audioData: Float32Array) {
   view.setUint32(16, 16, true)
   // 样本格式（原始）
   view.setUint16(20, 1, true)
-  // 立体声（2声道）
-  view.setUint16(22, 2, true)
+  // 单声道（原来是双声道）
+  view.setUint16(22, channelCount, true)
   // 采样率
-  view.setUint32(24, 44100, true)
+  view.setUint32(24, samplingRate, true)
   // 字节率（采样率*块对齐）
-  view.setUint32(28, 44100 * 2, true)
+  view.setUint32(28, samplingRate * 2 * channelCount * (sampleBits / 8), true)
   // 块对齐（通道数*每个样本字节）
-  view.setUint16(32, 2 * 2, true)
+  view.setUint16(32, (sampleBits / 8) * channelCount, true)
   // 每个样本位数
-  view.setUint16(34, 16, true)
+  view.setUint16(34, sampleBits, true)
   // 数据子块
   // 数据块标识符
   writeUTFBytes(view, 36, 'data')
@@ -193,16 +177,14 @@ function createAudioFile (audioData: Float32Array) {
 
   // 下面的操作是填入数据
   for (const data of audioData) {
-    view.setInt16(index, data * (0x7FFF * 1), true)
-    index += 2
+    const s = Math.max(-1, Math.min(1, data))
+    let val = s < 0 ? s * 0x8000 : s * 0x7FFF
+    val = parseInt(String(255 / (65535 / (val + 32768))))
+    view.setInt8(index++, val)
   }
-  return new File(
-    [buffer],
-    (new Date()).toISOString().replace('T', ' '),
-    {
-      type: 'audio/wave'
-    }
-  )
+  return new File([buffer], (new Date()).toISOString().replace('T', ' '), {
+    type: 'audio/mpeg'
+  })
 }
 
 /**
@@ -231,6 +213,30 @@ function mergeArray (arr: Array<Float32Array>): Float32Array {
     offset += item.length
   }
   return floatArray
+}
+
+/**
+ * 压缩数据，更改数据的采样率：
+ *  - 现有的采样率除以压缩后的为压缩比例
+ *  - 生成数据时，每一个压缩比例为一个数据间隔取数据
+ *
+ * @param {T} data 原始的数据
+ * @param {22050 | 11025} sampling 压缩后的采样率
+ * @returns {T} 返回压缩后的数据
+ */
+function compressedData<T extends Float32Array> (data: T, sampling:22050|11025): T {
+  const compression = sampleRate / sampling
+  const dataLength = data.length / compression
+  const arr = new Float32Array(dataLength)
+  let index = 0
+
+  compressionSamplingRate = sampling
+
+  for (let i = 0; i < dataLength; i++, index += compression) {
+    arr[i] = data[index]
+  }
+
+  return arr as T
 }
 </script>
 

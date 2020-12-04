@@ -130,7 +130,7 @@ export default class ChatPage extends Vue {
     }
   }
 
-  leave ():void{
+  leave ():void {
     this.localStream?.getTracks().forEach((trak:MediaStreamTrack) => {
       trak.stop()
     })
