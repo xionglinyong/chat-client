@@ -1,70 +1,116 @@
 <template lang="pug">
-  div(:class="$style.inner")
+  v-app(:class="$style.inner")
     video#remote(ref="remoteVideo" @contextmenu.prevent="")
     video#local(:class="$style.local" ref="localVideo" @contextmenu.prevent="")
     div(:class="$style.status") {{connectionStatus}}
+    div(:class="$style.myId" v-if="myId && !visible") 我的ID：{{myId}}
     v-btn(
       :class="$style.callBtn"
       @click="connectionStatus==='通话中'?handleDisconnect():handleCall()"
       :disabled="canUse") {{connectionStatus==='通话中'?'挂断':'呼叫'}}
+    v-dialog(persistent v-model="visible" data-app max-width="100%" width="300px" )
+      v-card
+        v-card-title 输入你的ID及对方ID
+        v-card-text
+          v-form(ref="form" lazy-validation)
+            v-text-field(
+              label="你的ID"
+              v-model="myId"
+              :counter="10"
+              :rules="myIdRules")
+            v-text-field(
+              label="对方ID"
+              v-model="inverseId"
+              :counter="10"
+              :rules="inverseIdRules")
+            v-btn(
+              width="100%"
+              color="primary"
+              :disabled="connecting"
+              :loading="connecting"
+              @click="initConversation") 连接
+              template(#loader)
+                span 连接中...
 </template>
 
 <script lang="ts">
-// 目前问题：可访问的stun服务无法用于项目，待解决
+// 下一步
+//  ？发送聊天信息
 
-// 证书类型：nginx
-// 安装https：https://blog.csdn.net/qq_36940740/article/details/105325395
-// 安装https：https://blog.csdn.net/qq_33973359/article/details/105537568
-// 开启服务命令：peerjs --port 9522 --key peerjs --path /peer --sslkey ./xliny.top.key --sslcert ./xliny.top.pem
-// 访问：https://39.105.103.136:9522/peer
-// stun服务：https://github.com/enobufs/stun
 import { Component, Ref, Vue } from 'vue-property-decorator'
 import Peer, { DataConnection, MediaConnection, PeerJSOption } from 'peerjs'
 import { News, NewType } from '@/types/chart'
 
-enum ConnectionStatus{
-  'calling'='呼叫中',
-  'connecting'='通话中',
-  'activeDisconnect'='主动断开',
-  'passiveDisconnect'='断开',
-  'notConnected'='未呼叫',
-  'error'='发生错误'
+enum ConnectionStatus {
+  'calling' = '呼叫中',
+  'connecting' = '通话中',
+  'activeDisconnect' = '主动断开',
+  'passiveDisconnect' = '断开',
+  'notConnected' = '未呼叫',
+  'error' = '发生错误'
 }
 
 // 本地代理配置
-const peerOption:PeerJSOption = {
-  host: '39.105.103.136', // 中转服务地址
+const peerOption: PeerJSOption = {
+  host: 'www.xliny.top', // 中转服务地址
   secure: true, // 使用https
   port: 9522, // 端口
   debug: 3, // 0:输出日志，1:输出错误，2:输出错误和日志，3：输出所有
   path: 'peer',
   config: {
-    // iceTransportPolicy: 'relay',
-    // sdpSemantics: 'unified-plan',
     iceServers: [
-      // { urls: 'turn:numb.viagenie.ca', credential: '123456', username: '2690363124@qq.com' }
-      { urls: 'stun:39.105.103.136:3478' }
+      { urls: 'turn:39.105.103.136:3475', credential: '123456', username: 'test' }
     ]
   }
 }
 
+const errMap: { [id: string]: string } = {
+  'browser-incompatible': '浏览器不支持某些或者所有WebRTC，请使用新版谷歌浏览器',
+  disconnected: '已断开与服务器的链接，请重新链接',
+  'unavailable-id': 'ID不可用，因为该ID已存在',
+  'invalid-id': '非法ID，请输入合法ID',
+  'invalid-key': '非法ID，请输入合法ID',
+  network: '无法连接到信令服务器',
+  'server-error': '无法访问服务器',
+  'ssl-unavailable': 'SSL证书不可用',
+  'peer-unavailable': '对方不在线'
+}
+
 @Component
 export default class Peer121 extends Vue {
-  canUse=false
-  connectionStatus:ConnectionStatus=ConnectionStatus.notConnected// 连接状态
-  mediaStream!:MediaStream// 媒体流
-  mediaConnection:MediaConnection|null=null// 媒体连接
-  peer:Peer=new Peer(this.$route.query.id as string, peerOption)
-  dataConnection!:DataConnection
+  myId = ''
+  inverseId = ''
+  connecting = false
+  canUse = false
+  connectionStatus: ConnectionStatus = ConnectionStatus.notConnected// 连接状态
+  mediaStream!: MediaStream// 媒体流
+  mediaConnection: MediaConnection | null = null// 媒体连接
+  peer!: Peer
+  dataConnection!: DataConnection
+  visible = true
+  myIdRules = [
+    (v: string) => !!v || '请输入ID',
+    (v: string) => v.length <= 10 || 'ID在十位数之内'
+  ]
 
-  @Ref('localVideo') localVideo!:HTMLVideoElement
-  @Ref('remoteVideo') remoteVideo!:HTMLVideoElement
+  inverseIdRules = [
+    (v: string) => {
+      if (v) {
+        return v.length <= 10 || 'ID在十位数之内'
+      }
+      return true
+    }
+  ]
+
+  @Ref('localVideo') localVideo!: HTMLVideoElement
+  @Ref('remoteVideo') remoteVideo!: HTMLVideoElement
+  @Ref('form') form!: HTMLFormElement
 
   /**
    * 开始呼叫
    * @returns {Promise<void>}
    */
-  async handleCall ():Promise<void> {
+  async handleCall (): Promise<void> {
     const { localVideo } = this
     const mediaStream = this.mediaStream = await navigator.mediaDevices.getUserMedia({
       video: true,
@@ -82,14 +128,14 @@ export default class Peer121 extends Vue {
     })
   }
 
-  async handleDisconnect ():Promise<void> {
+  async handleDisconnect (): Promise<void> {
     await this.onDisconnect()
     this?.dataConnection?.send({
       type: NewType.disconnect
     })
   }
 
-  async onDisconnect ():Promise<void> {
+  async onDisconnect (): Promise<void> {
     const { remoteVideo, localVideo } = this
     this.connectionStatus = ConnectionStatus.passiveDisconnect
     await remoteVideo.pause()
@@ -98,11 +144,11 @@ export default class Peer121 extends Vue {
     this?.mediaConnection?.close()
   }
 
-  handleAnswer (data:string):void {
-    const { remoteVideo, peer, mediaStream } = this
+  handleAnswer (data: string): void {
+    const { remoteVideo, peer, mediaStream, inverseId } = this
     if (data === 'receive') {
-      const mc = this.mediaConnection = peer.call('ReceiveUser', mediaStream)
-      mc.on('stream', (remoteStream:MediaStream) => {
+      const mc = this.mediaConnection = peer.call(inverseId, mediaStream)
+      mc.on('stream', (remoteStream: MediaStream) => {
         this.connectionStatus = ConnectionStatus.connecting
         remoteVideo.srcObject = remoteStream
         remoteVideo.onloadedmetadata = async () => {
@@ -121,19 +167,19 @@ export default class Peer121 extends Vue {
     }
   }
 
-  stopTrack ():void {
+  stopTrack (): void {
     const tracks = this.mediaStream?.getTracks() ?? []
     for (const track of tracks) {
       track.stop()
     }
   }
 
-  initReceive ():void {
+  initReceive (): void {
     const { peer } = this
     const { localVideo, remoteVideo } = this
     const res = confirm('接收到视频邀请，是否接受？')
     if (res) {
-      peer.on('call', async (p:MediaConnection) => {
+      peer.on('call', async (p: MediaConnection) => {
         this.mediaStream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true
@@ -143,7 +189,7 @@ export default class Peer121 extends Vue {
           await localVideo.play()
         }
         p.answer(this.mediaStream)
-        p.on('stream', async (stream:MediaStream) => {
+        p.on('stream', async (stream: MediaStream) => {
           remoteVideo.srcObject = stream
           remoteVideo.onloadedmetadata = async () => {
             this.connectionStatus = ConnectionStatus.connecting
@@ -171,51 +217,58 @@ export default class Peer121 extends Vue {
     })
   }
 
-  verificationService ():void {
-    const httpRequest = new XMLHttpRequest()
-    httpRequest.open('get', 'https://39.105.103.136:9522/peer', true)
-    httpRequest.send()
-    httpRequest.onreadystatechange = (e:Event) => {
-      if (httpRequest.readyState === 4 && httpRequest.status === 200) {
-        console.log(httpRequest.response)
-      }
-    }
-  }
-
-  mounted ():void {
-    const { peer } = this
-    const { id } = this.$route.query
-    this.verificationService()
+  initConversation (): void {
+    if (!this.form.validate()) return
+    this.connecting = true
+    const { myId, inverseId } = this
+    let { peer } = this
+    console.log(peer)
+    if (!peer) peer = this.peer = new Peer(myId, peerOption)
+    // 创建实例成功
     peer.on('open', async () => {
-      if (id === 'ReceiveUser') {
-        peer.on('connection', (conn:DataConnection) => {
-          this.dataConnection = conn
-          conn.on('data', (data:News) => {
-            if (data.type === NewType.invite) {
-              this.initReceive()
-            } else if (data.type === NewType.disconnect) {
-              this.onDisconnect()
-            }
-          })
+      const onData = (data: News) => {
+        if (data.type === NewType.Answer) {
+          this.handleAnswer(data.data)
+        } else if (data.type === NewType.invite) {
+          this.initReceive()
+        } else if (data.type === NewType.disconnect) {
+          this.onDisconnect()
+        }
+      }
+      // 当数据通道被连接时
+      peer.on('connection', (conn: DataConnection) => {
+        this.dataConnection = conn
+        this.inverseId = conn.peer
+        conn.on('data', onData)
+      })
+      if (inverseId) {
+        const conn = this.dataConnection = peer.connect(inverseId)
+        conn.on('open', () => {
+          this.connecting = false
+          this.visible = false
+          conn.on('data', onData)
         })
       } else {
-        const conn = this.dataConnection = peer.connect('ReceiveUser')
-        conn.on('open', () => {
-          conn.on('data', (data:News) => {
-            if (data.type === NewType.Answer) {
-              this.handleAnswer(data.data)
-            } else if (data.type === NewType.disconnect) {
-              this.onDisconnect()
-            }
-          })
-        })
+        this.connecting = false
+        this.visible = false
       }
     })
-    peer.on('error', () => {
-      peer.reconnect()
+    peer.on('error', (err) => {
+      const { type } = err
+      console.log(err.type)
+      if (type === '') {
+        peer.reconnect()
+      } else {
+        alert(errMap[type])
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        this.peer = null
+      }
+      this.connecting = false
     })
   }
 }
+
 </script>
 
 <style lang="stylus" rel="stylesheet/stylus" module>
@@ -223,6 +276,7 @@ export default class Peer121 extends Vue {
   position relative
   width 100%
   height 100%
+
   .status
     position absolute
     top 10px
@@ -231,13 +285,22 @@ export default class Peer121 extends Vue {
     width 100px
     height 50px
     line-height 50px
-    background rgba(120,213,120,.9)
+    background rgba(120, 213, 120, .9)
     text-align center
     border-radius 5px
     user-select none
+
+  .myId
+    position absolute
+    top 10px
+    left 10px
+    background #fff
+    padding 10px
+
   video
     width 100%
     height 100%
+
     &.local
       position absolute
       width 200px
@@ -245,6 +308,7 @@ export default class Peer121 extends Vue {
       bottom 50px
       right 50px
       border 1px solid red
+
   .callBtn
     position absolute
     width 100px

@@ -20,6 +20,7 @@ let timer = 0
 // 压缩后的采样率
 let compressionSamplingRate = 22050
 const sampleRate = 44100
+const channelNum = 1
 
 @Component({
   components: { RealVolume }
@@ -61,10 +62,10 @@ export default class SoundRecord2 extends Vue {
       // 添加音频流入事件
       jsNode.onaudioprocess = (e: AudioProcessingEvent) => {
         const audioBuffer = e.inputBuffer
-        const leftData = audioBuffer.getChannelData(0)
-        this.volume = leftData[leftData.length - 1] + 1
+        const audioData = audioBuffer.getChannelData(0)
+        this.volume = audioData[audioData.length - 1] + 1
         // 这里有个坑，如果不进行深拷贝的话，录制出来的音频会有问题
-        this.audioData.push(leftData.slice(0))
+        this.audioData.push(audioData.slice(0))
       }
       // audioNode连接到jsNode
       mediaNode.connect(jsNode)
