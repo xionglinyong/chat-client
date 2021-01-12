@@ -11,8 +11,7 @@ Vue.config.productionTip = false
 // 全局使用socket
 Vue.use(new VueSocketIO({
   debug: false, // 开启socket控制台输出
-  connection: 'https://www.xliny.top:9521/', // 链接地址
-  // connection: 'https://192.168.1.174:9521/', // 链接地址
+  connection: 'https://39.105.103.136:9521/', // 链接地址
   // 配置vuex
   vuex: {
     store,

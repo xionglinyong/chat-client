@@ -52,7 +52,7 @@ enum ConnectionStatus {
 
 // 本地代理配置
 const peerOption: PeerJSOption = {
-  host: 'www.xliny.top', // 中转服务地址
+  host: '39.105.103.136', // 中转服务地址
   secure: true, // 使用https
   port: 9522, // 端口
   debug: 3, // 0:输出日志，1:输出错误，2:输出错误和日志，3：输出所有
@@ -255,8 +255,7 @@ export default class Peer121 extends Vue {
     })
     peer.on('error', (err) => {
       const { type } = err
-      console.log(err.type)
-      if (type === '') {
+      if (type === 'disconnected') {
         peer.reconnect()
       } else {
         alert(errMap[type])
