@@ -18,7 +18,8 @@ export interface News {
 export enum NewType {
   invite,
   Answer,
-  disconnect
+  disconnect,
+  message
 }
 
 type MimeType='video/webm'|'audio/webm'|'video/webm\\;codecs=vp8'

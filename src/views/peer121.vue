@@ -4,6 +4,17 @@
     video#local(:class="$style.local" ref="localVideo" @contextmenu.prevent="")
     div(:class="$style.status") {{connectionStatus}}
     div(:class="$style.myId" v-if="myId && !visible") 我的ID：{{myId}}
+    div(:class="$style.messageInner")
+      div(:class="$style.messages")
+        div(v-for="message of messages") {{message.sender}}:{{message.message}}
+      v-textarea(
+        v-model="message"
+        append-icon="mdi-send"
+        height="50px"
+        @click:append="sendMsg"
+        :class="$style.textarea"
+        @keyup.enter.native="sendMsg"
+        solo)
     v-btn(
       :class="$style.callBtn"
       @click="connectionStatus==='通话中'?handleDisconnect():handleCall()"
@@ -66,7 +77,6 @@ const peerOption: PeerJSOption = {
 
 const errMap: { [id: string]: string } = {
   'browser-incompatible': '浏览器不支持某些或者所有WebRTC，请使用新版谷歌浏览器',
-  disconnected: '已断开与服务器的链接，请重新链接',
   'unavailable-id': 'ID不可用，因为该ID已存在',
   'invalid-id': '非法ID，请输入合法ID',
   'invalid-key': '非法ID，请输入合法ID',
@@ -88,10 +98,13 @@ export default class Peer121 extends Vue {
   peer!: Peer
   dataConnection!: DataConnection
   visible = true
+  message=''
   myIdRules = [
     (v: string) => !!v || '请输入ID',
     (v: string) => v.length <= 10 || 'ID在十位数之内'
   ]
+
+  messages:Array<{sender:string, message:string}>=[]
 
   inverseIdRules = [
     (v: string) => {
@@ -167,6 +180,19 @@ export default class Peer121 extends Vue {
     }
   }
 
+  sendMsg ():void {
+    const { message, dataConnection } = this
+    dataConnection.send({
+      type: NewType.message,
+      data: message
+    })
+    this.messages.push({
+      sender: '我',
+      message
+    })
+    this.message = ''
+  }
+
   stopTrack (): void {
     const tracks = this.mediaStream?.getTracks() ?? []
     for (const track of tracks) {
@@ -222,7 +248,6 @@ export default class Peer121 extends Vue {
     this.connecting = true
     const { myId, inverseId } = this
     let { peer } = this
-    console.log(peer)
     if (!peer) peer = this.peer = new Peer(myId, peerOption)
     // 创建实例成功
     peer.on('open', async () => {
@@ -233,6 +258,11 @@ export default class Peer121 extends Vue {
           this.initReceive()
         } else if (data.type === NewType.disconnect) {
           this.onDisconnect()
+        } else if (data.type === NewType.message) {
+          this.messages.push({
+            message: data.data,
+            sender: this.inverseId
+          })
         }
       }
       // 当数据通道被连接时
@@ -295,6 +325,18 @@ export default class Peer121 extends Vue {
     left 10px
     background #fff
     padding 10px
+
+  .messageInner
+    position absolute
+    display grid
+    grid-template-rows auto 50px
+    width 200px
+    height 300px
+    bottom 200px
+    background rgba(184,184,184,.8)
+    right 50px
+    .messages
+      overflow hidden auto
 
   video
     width 100%
