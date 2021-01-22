@@ -98,13 +98,13 @@ export default class Peer121 extends Vue {
   peer!: Peer
   dataConnection!: DataConnection
   visible = true
-  message=''
+  message = ''
+  messages: Array<{ sender: string, message: string }> = []
+
   myIdRules = [
     (v: string) => !!v || '请输入ID',
     (v: string) => v.length <= 10 || 'ID在十位数之内'
   ]
-
-  messages:Array<{sender:string, message:string}>=[]
 
   inverseIdRules = [
     (v: string) => {
@@ -180,7 +180,8 @@ export default class Peer121 extends Vue {
     }
   }
 
-  sendMsg ():void {
+  // 通过数据通道发送数据
+  sendMsg (): void {
     const { message, dataConnection } = this
     dataConnection.send({
       type: NewType.message,
@@ -205,6 +206,7 @@ export default class Peer121 extends Vue {
     const { localVideo, remoteVideo } = this
     const res = confirm('接收到视频邀请，是否接受？')
     if (res) {
+      // 当被呼叫时
       peer.on('call', async (p: MediaConnection) => {
         this.mediaStream = await navigator.mediaDevices.getUserMedia({
           video: true,
@@ -214,7 +216,9 @@ export default class Peer121 extends Vue {
         localVideo.onloadedmetadata = async () => {
           await localVideo.play()
         }
+        // 应答
         p.answer(this.mediaStream)
+        // 接收到对等端媒体流
         p.on('stream', async (stream: MediaStream) => {
           remoteVideo.srcObject = stream
           remoteVideo.onloadedmetadata = async () => {
@@ -222,25 +226,31 @@ export default class Peer121 extends Vue {
             await remoteVideo.play()
           }
         })
+        // 如果连接关闭
         p.on('close', () => {
           this.connectionStatus = ConnectionStatus.notConnected
           this.onDisconnect()
         })
-        p.on('error', () => {
-          this.connectionStatus = ConnectionStatus.error
-        })
-        peer.on('disconnected', async () => {
-          console.log('disconnected')
-        })
-        peer.on('close', () => {
-          console.log('close')
-        })
+        p.on('error', this.onError)
       })
     }
     this?.dataConnection?.send({
       type: NewType.Answer,
       data: res ? 'receive' : 'reject'
     })
+  }
+
+  onError (err: any): void {
+    const { type } = err
+    if (type === 'disconnected') {
+      this.peer.reconnect()
+    } else {
+      alert(errMap[type])
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      this.peer = null
+    }
+    this.connecting = false
   }
 
   initConversation (): void {
@@ -283,18 +293,7 @@ export default class Peer121 extends Vue {
         this.visible = false
       }
     })
-    peer.on('error', (err) => {
-      const { type } = err
-      if (type === 'disconnected') {
-        peer.reconnect()
-      } else {
-        alert(errMap[type])
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        this.peer = null
-      }
-      this.connecting = false
-    })
+    peer.on('error', this.onError)
   }
 }
 
@@ -333,8 +332,9 @@ export default class Peer121 extends Vue {
     width 200px
     height 300px
     bottom 200px
-    background rgba(184,184,184,.8)
+    background rgba(184, 184, 184, .8)
     right 50px
+
     .messages
       overflow hidden auto
 
